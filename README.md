@@ -85,6 +85,12 @@ python setup.py install
 
 We use [**Hydra**](https://hydra.cc/) to manage hyperparameter configurations.
 
+At `examples/` dir, run:
+```
+mkdir data
+python train_gcn.py --root ./data
+```
+
 ## Cite
 
 Please cite [our paper](http://arxiv.org/abs/2106.05609) if you use this code in your own work:
