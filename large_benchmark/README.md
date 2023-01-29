@@ -2,6 +2,8 @@
 
 ```
 python main.py model=pna dataset=flickr root=/tmp/datasets device=0 log_every=1
+python main.py model=pna_jk dataset=reddit root=/tmp/datasets device=0 log_every=1
+python main.py model=gcn dataset=ppi root=/tmp/datasets device=0 log_every=1
 ```
 
 You can choose between the following models and datasets:
