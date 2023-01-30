@@ -1,6 +1,6 @@
 defaults:
-  - model: pna
-  - dataset: flickr
+  - model: pna_jk
+  - dataset: reddit
 device: 0
 root: '/tmp/datasets'
 log_every: 1

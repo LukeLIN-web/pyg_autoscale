@@ -1,13 +1,18 @@
 import hydra
 from tqdm import tqdm
 from omegaconf import OmegaConf
-
+import torch.distributed as dist
+import copy
+import os
+from torch_geometric.loader import NeighborLoader
 import torch
 from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
 from torch_geometric_autoscale import (get_data, metis, permute, models,
                                        SubgraphLoader, compute_micro_f1)
+import torch.multiprocessing as mp
 
+from torch.nn.parallel import DistributedDataParallel
 torch.manual_seed(123)
 criterion = torch.nn.CrossEntropyLoss()
 
@@ -56,66 +61,69 @@ def test(run, model, data):
     return val_acc, test_acc
 
 
-@hydra.main(config_path='conf', config_name='config')
-def main(conf):
+def run(rank, world_size, conf):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    dist.init_process_group('nccl', rank=rank, world_size=world_size)
+
+    device = torch.device(rank)
     model_name, dataset_name = conf.model.name, conf.dataset.name
     conf.model.params = conf.model.params[dataset_name]
     params = conf.model.params
-    print(OmegaConf.to_yaml(conf))
+    if rank == 0:
+        print(OmegaConf.to_yaml(conf))
     if isinstance(params.grad_norm, str):
         params.grad_norm = None
 
-    device = f'cuda:{conf.device}' if torch.cuda.is_available() else 'cpu'
-
     data, in_channels, out_channels = get_data(conf.root, dataset_name)
-    if conf.model.norm:
-        data.adj_t = gcn_norm(data.adj_t)
-    elif conf.model.loop:
-        data.adj_t = data.adj_t.set_diag()
-
-    perm, ptr = metis(data.adj_t, num_parts=params.num_parts, log=True)
-    data = permute(data, perm, log=True)
-
-    loader = SubgraphLoader(data, ptr, batch_size=params.batch_size,
-                            shuffle=True, num_workers=params.num_workers,
-                            persistent_workers=params.num_workers > 0)
+    # Split training indices into `world_size` many chunks:
+    kwargs = dict(batch_size=1024, num_workers=4, persistent_workers=True)
+    train_idx = data.train_mask.nonzero(as_tuple=False).view(-1)
+    train_idx = train_idx.split(train_idx.size(0) // world_size)[rank]
+    train_loader = NeighborLoader(data, input_nodes=train_idx,
+                                  num_neighbors=[25, 10], shuffle=True,
+                                  drop_last=True, **kwargs)
 
     data = data.clone().to(device)  # Let's just store all data on GPU...
 
     GNN = getattr(models, model_name)
     model = GNN(
-        num_nodes=data.num_nodes,
+        num_nodes=data.num_nodes,  # 这里要不要分割?
         in_channels=in_channels,
         out_channels=out_channels,
         device=device,  # ... and put histories on GPU as well.
         **params.architecture,
     ).to(device)
+    model = DistributedDataParallel(model, device_ids=[rank])
 
     results = torch.empty(params.runs)
-    pbar = tqdm(total=params.runs * params.epochs)
+    if rank == 0:
+        pbar = tqdm(total=params.runs * params.epochs)
     for run in range(params.runs):
-        model.reset_parameters()
-        optimizer = torch.optim.Adam([
-            dict(params=model.reg_modules.parameters(),
-                 weight_decay=params.reg_weight_decay),
-            dict(params=model.nonreg_modules.parameters(),
-                 weight_decay=params.nonreg_weight_decay)
-        ], lr=params.lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=params.lr)
 
         test(0, model, data)  # Fill history.
 
         best_val_acc = 0
         for epoch in range(params.epochs):
-            train(run, model, loader, optimizer, params.grad_norm)
+            train(run, model, train_loader, optimizer, params.grad_norm)
             val_acc, test_acc = test(run, model, data)
             if val_acc > best_val_acc:
                 best_val_acc = val_acc
                 results[run] = test_acc
-
-            pbar.set_description(f'Mini Acc: {100 * results[run]:.2f}')
-            pbar.update(1)
-    pbar.close()
+            if rank == 0:
+                pbar.set_description(f'Mini Acc: {100 * results[run]:.2f}')
+                pbar.update(1)
+    if rank == 0:
+        pbar.close()
     print(f'Mini Acc: {100 * results.mean():.2f} ± {100 * results.std():.2f}')
+
+
+@hydra.main(config_path='conf', config_name='config', version_base='1.1')
+def main(conf):
+    world_size = torch.cuda.device_count()
+    print('Let\'s use', world_size, 'GPUs!')
+    mp.spawn(run, args=(world_size, conf), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
