@@ -28,14 +28,17 @@ class SubgraphLoader(DataLoader):
     generates subgraphs from mini-batches in :obj:`ptr` (including their 1-hop
     neighbors)."""
     def __init__(self, data: Data, ptr: Tensor, batch_size: int = 1,
-                 bipartite: bool = True, log: bool = True, **kwargs):
+                 bipartite: bool = True, log: bool = True,partition: int =1,rank: int =0, **kwargs):
 
         self.data = data
         self.ptr = ptr
         self.bipartite = bipartite
         self.log = log
 
-        n_id = torch.arange(data.num_nodes)
+        n_id = torch.arange(data.num_nodes) 
+        print(f"ptr = {ptr}")
+        print((ptr[1:] - ptr[:-1]).tolist()) # 得到每一段的长度
+        print(sum((ptr[1:] - ptr[:-1]).tolist())) # 得到总长度
         batches = n_id.split((ptr[1:] - ptr[:-1]).tolist())
         batches = [(i, batches[i]) for i in range(len(batches))]
 

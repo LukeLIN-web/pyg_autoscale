@@ -68,16 +68,22 @@ def main(conf):
     device = f'cuda:{conf.device}' if torch.cuda.is_available() else 'cpu'
 
     data, in_channels, out_channels = get_data(conf.root, dataset_name)
-    print(data)
+
     if conf.model.norm:
         data.adj_t = gcn_norm(data.adj_t)
     elif conf.model.loop:
         data.adj_t = data.adj_t.set_diag()
 
     perm, ptr = metis(data.adj_t, num_parts=params.num_parts, log=True)
-    data = permute(data, perm, log=True)
+    print(f"perm: {perm}, ptr: {ptr}")
 
-    loader = SubgraphLoader(data, ptr, batch_size=params.batch_size,
+    half_lenperm , half_lenptr = len(perm)//2, len(ptr)//2
+    data1 = permute(data, perm, log=True)
+
+    loader1 = SubgraphLoader(data1, ptr[:half_lenptr+1], batch_size=params.batch_size,
+                            shuffle=True, num_workers=params.num_workers,
+                            persistent_workers=params.num_workers > 0)
+    loader2 = SubgraphLoader(data1, ptr[half_lenptr:], batch_size=params.batch_size,
                             shuffle=True, num_workers=params.num_workers,
                             persistent_workers=params.num_workers > 0)
 
@@ -107,7 +113,8 @@ def main(conf):
 
         best_val_acc = 0
         for epoch in range(params.epochs):
-            train(run, model, loader, optimizer, params.grad_norm)
+            train(run, model, loader1, optimizer, params.grad_norm)
+            train(run, model, loader2, optimizer, params.grad_norm)
             val_acc, test_acc = test(run, model, data)
             if val_acc > best_val_acc:
                 best_val_acc = val_acc

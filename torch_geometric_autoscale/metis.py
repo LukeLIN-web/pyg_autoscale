@@ -29,7 +29,7 @@ def metis(adj_t: SparseTensor, num_parts: int, recursive: bool = False,
     else:
         rowptr, col, _ = adj_t.csr()
         cluster = partition_fn(rowptr, col, None, num_parts, recursive)
-        print(cluster.size())
+        # print(cluster.size())
         cluster, perm = cluster.sort()# sort cluster Tensor and return index
         ptr = torch.ops.torch_sparse.ind2ptr(cluster, num_parts)
 
@@ -49,8 +49,8 @@ def permute(data: Data, perm: Tensor, log: bool = True) -> Data:
 
     data = copy.copy(data)
     for key, value in data:
-        print("key = ", key)
-        print("value = ", value)
+        # print("key = ", key)
+        # print("value = ", value)
         if isinstance(value, Tensor) and value.size(0) == data.num_nodes:
             data[key] = value[perm]
         elif isinstance(value, Tensor) and value.size(0) == data.num_edges:
