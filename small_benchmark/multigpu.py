@@ -121,8 +121,7 @@ def run(rank, world_size, conf):
 
 @hydra.main(config_path='conf', config_name='config', version_base='1.1')
 def main(conf):
-    world_size = torch.cuda.device_count()
-    print('Let\'s use', world_size, 'GPUs!')
+    world_size = conf.world_size
     mp.spawn(run, args=(world_size, conf), nprocs=world_size, join=True)
 
 

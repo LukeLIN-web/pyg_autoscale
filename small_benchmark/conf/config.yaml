@@ -2,4 +2,5 @@ defaults:
   - model: gcn
   - dataset: cora
 device: 0
+world_size: 3
 root: '/tmp/datasets'

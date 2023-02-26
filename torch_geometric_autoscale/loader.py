@@ -27,18 +27,19 @@ class SubgraphLoader(DataLoader):
     r"""A simple subgraph loader that, given a pre-partioned :obj:`data` object,
     generates subgraphs from mini-batches in :obj:`ptr` (including their 1-hop
     neighbors)."""
+
     def __init__(self, data: Data, ptr: Tensor, batch_size: int = 1,
-                 bipartite: bool = True, log: bool = True,partition: int =1,rank: int =0, **kwargs):
+                 bipartite: bool = True, log: bool = True, **kwargs):
 
         self.data = data
         self.ptr = ptr
         self.bipartite = bipartite
         self.log = log
 
-        n_id = torch.arange(data.num_nodes) 
-        print(f"ptr = {ptr}")
-        print((ptr[1:] - ptr[:-1]).tolist()) # 得到每一段的长度
-        print(sum((ptr[1:] - ptr[:-1]).tolist())) # 得到总长度
+        n_id = torch.arange(data.num_nodes)
+        n_id = n_id[:ptr[-1] - ptr[0]]  # 取 ptr[-1] - ptr[0] 个节点
+        # print((ptr[1:] - ptr[:-1]).tolist())  # 得到每一段的长度
+        # print(sum((ptr[1:] - ptr[:-1]).tolist()))  # 得到总长度
         batches = n_id.split((ptr[1:] - ptr[:-1]).tolist())
         batches = [(i, batches[i]) for i in range(len(batches))]
 
@@ -100,6 +101,7 @@ class EvalSubgraphLoader(SubgraphLoader):
     subgraphs from randomly sampled mini-batches, and should therefore only be
     used for evaluation.
     """
+
     def __init__(self, data: Data, ptr: Tensor, batch_size: int = 1,
                  bipartite: bool = True, log: bool = True, **kwargs):
 

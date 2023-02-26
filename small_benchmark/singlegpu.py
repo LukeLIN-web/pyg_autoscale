@@ -7,6 +7,7 @@ from torch_geometric.nn.conv.gcn_conv import gcn_norm
 
 from torch_geometric_autoscale import (get_data, metis, permute, models,
                                        SubgraphLoader, compute_micro_f1)
+import microGNN.utils.calu_similarity as sim
 
 torch.manual_seed(123)
 criterion = torch.nn.CrossEntropyLoss()
@@ -75,18 +76,22 @@ def main(conf):
         data.adj_t = data.adj_t.set_diag()
 
     perm, ptr = metis(data.adj_t, num_parts=params.num_parts, log=True)
-    print(f"perm: {perm}, ptr: {ptr}")
+    # print(f"perm: {perm}, ptr: {ptr}")
 
-    half_lenperm , half_lenptr = len(perm)//2, len(ptr)//2
-    data1 = permute(data, perm, log=True)
-
-    loader1 = SubgraphLoader(data1, ptr[:half_lenptr+1], batch_size=params.batch_size,
+    # half_lenptr = len(ptr) // 2
+    data = permute(data, perm, log=True)
+    loader = SubgraphLoader(data, ptr, batch_size=params.batch_size,
                             shuffle=True, num_workers=params.num_workers,
                             persistent_workers=params.num_workers > 0)
-    loader2 = SubgraphLoader(data1, ptr[half_lenptr:], batch_size=params.batch_size,
-                            shuffle=True, num_workers=params.num_workers,
-                            persistent_workers=params.num_workers > 0)
-
+    print(len(loader))
+    # loader1 = SubgraphLoader(data, ptr[:half_lenptr + 1], batch_size=params.batch_size,
+    #                          shuffle=True, num_workers=params.num_workers,
+    #                          persistent_workers=params.num_workers > 0)
+    # loader2 = SubgraphLoader(data, ptr[half_lenptr:], batch_size=params.batch_size,
+    #                          shuffle=True, num_workers=params.num_workers,
+    #                          persistent_workers=params.num_workers > 0)
+    # print(len(loader2))
+    # print(len(loader1))
     data = data.clone().to(device)  # Let's just store all data on GPU...
 
     GNN = getattr(models, model_name)
@@ -101,29 +106,41 @@ def main(conf):
     results = torch.empty(params.runs)
     pbar = tqdm(total=params.runs * params.epochs)
     for run in range(params.runs):
-        model.reset_parameters()
-        optimizer = torch.optim.Adam([
-            dict(params=model.reg_modules.parameters(),
-                 weight_decay=params.reg_weight_decay),
-            dict(params=model.nonreg_modules.parameters(),
-                 weight_decay=params.nonreg_weight_decay)
-        ], lr=params.lr)
+        # model.reset_parameters()
+        # optimizer = torch.optim.Adam([
+        #     dict(params=model.reg_modules.parameters(),
+        #          weight_decay=params.reg_weight_decay),
+        #     dict(params=model.nonreg_modules.parameters(),
+        #          weight_decay=params.nonreg_weight_decay)
+        # ], lr=params.lr)
 
-        test(0, model, data)  # Fill history.
+        # test(0, model, data)  # Fill history.
 
-        best_val_acc = 0
-        for epoch in range(params.epochs):
-            train(run, model, loader1, optimizer, params.grad_norm)
-            train(run, model, loader2, optimizer, params.grad_norm)
-            val_acc, test_acc = test(run, model, data)
-            if val_acc > best_val_acc:
-                best_val_acc = val_acc
-                results[run] = test_acc
-
-            pbar.set_description(f'Mini Acc: {100 * results[run]:.2f}')
-            pbar.update(1)
-    pbar.close()
-    print(f'Mini Acc: {100 * results.mean():.2f} ± {100 * results.std():.2f}')
+        # best_val_acc = 0
+        # for epoch in range(params.epochs):
+        subdatas = []
+        time = 0
+        similarity = []
+        for subdata in loader:
+            subdatas.append(subdata)
+        for i in range(len(subdatas) - 1):
+            time +=1
+            print(subdatas[i].n_id)
+            print(subdatas[i + 1].n_id)
+            similarity.append(sim.Ochiai(subdata.n_id, subdatas[i + 1].n_id))
+        print(time)
+        print(sum(similarity))
+        # for epoch in range(1):
+            # train(run, model, loader1, optimizer, params.grad_norm)
+            # train(run, model, loader2, optimizer, params.grad_norm)
+            #         val_acc, test_acc = test(run, model, data)
+            #         if val_acc > best_val_acc:
+            #             best_val_acc = val_acc
+            #             results[run] = test_acc
+            #         pbar.set_description(f'Mini Acc: {100 * results[run]:.2f}')
+            #         pbar.update(1)
+            # pbar.close()
+            # print(f'Mini Acc: {100 * results.mean():.2f} ± {100 * results.std():.2f}')
 
 
 if __name__ == "__main__":
