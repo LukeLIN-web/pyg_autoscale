@@ -51,6 +51,7 @@ def train(model, loader, optimizer):
     model.train()
 
     for batch, *args in loader:
+        print(batch.x.size())
         batch = batch.to(model.device)
         optimizer.zero_grad()
         out = model(batch.x, batch.adj_t, *args)
@@ -77,7 +78,7 @@ def test(model, data):
 test(model, data)  # Fill the history.
 
 best_val_acc = test_acc = 0
-for epoch in range(1, 201):
+for epoch in range(1, 2):
     train(model, loader, optimizer)
     train_acc, val_acc, tmp_test_acc = test(model, data)
     if val_acc > best_val_acc:

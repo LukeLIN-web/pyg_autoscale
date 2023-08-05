@@ -52,7 +52,7 @@ class ScalableGNN(torch.nn.Module):
 
         self.histories = torch.nn.ModuleList([
             History(num_nodes, hidden_channels, device)
-            for _ in range(num_layers - 1)
+            for _ in range(num_layers - 1) 
         ])
 
         self.pool: Optional[AsyncIOPool] = None
@@ -146,7 +146,7 @@ class ScalableGNN(torch.nn.Module):
             for hist in self.histories:
                 self.pool.async_pull(hist.emb, None, None, n_id[batch_size:])
 
-        out = self.forward(x, adj_t, batch_size, n_id, offset, count, **kwargs)
+        out = self.forward(x, adj_t, batch_size, n_id, offset, count, **kwargs)  #定义在子类了
 
         if self._async:
             for hist in self.histories:
@@ -168,7 +168,7 @@ class ScalableGNN(torch.nn.Module):
             return x  # Do nothing...
 
         if n_id is None and x.size(0) == self.num_nodes:
-            history.push(x)
+            history.push(x) #全图push
             return x
 
         assert n_id is not None
@@ -179,8 +179,8 @@ class ScalableGNN(torch.nn.Module):
 
         if not self._async:
             history.push(x[:batch_size], n_id[:batch_size], offset, count)
-            h = history.pull(n_id[batch_size:])
-            return torch.cat([x[:batch_size], h], dim=0)
+            h = history.pull(n_id[batch_size:]) #把mini batch外的都pull下来, 给下一个conv 用.
+            return torch.cat([x[:batch_size], h], dim=0) 
 
         else:
             out = self.pool.synchronize_pull()[:n_id.numel() - batch_size]

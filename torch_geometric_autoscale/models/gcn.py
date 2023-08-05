@@ -77,16 +77,16 @@ class GCN(ScalableGNN):
             x = F.dropout(x, p=self.dropout, training=self.training)
 
         for conv, bn, hist in zip(self.convs[:-1], self.bns, self.histories):
-            h = conv(x, adj_t)
+            h = conv(x, adj_t) #进行一次卷积
             if self.batch_norm:
                 h = bn(h)
             if self.residual and h.size(-1) == x.size(-1):
                 h += x[:h.size(0)]
             x = h.relu_()
-            x = self.push_and_pull(hist, x, *args)
+            x = self.push_and_pull(hist, x, *args) # 每一层存mini batch
             x = F.dropout(x, p=self.dropout, training=self.training)
 
-        h = self.convs[-1](x, adj_t)
+        h = self.convs[-1](x, adj_t) # 最后一层不用history.
 
         if not self.linear:
             return h

@@ -14,7 +14,7 @@ class History(torch.nn.Module):
 
         pin_memory = device is None or str(device) == 'cpu'
         self.emb = torch.empty(num_embeddings, embedding_dim, device=device,
-                               pin_memory=pin_memory)
+                               pin_memory=pin_memory) 
 
         self._device = torch.device('cpu')
 
@@ -34,7 +34,7 @@ class History(torch.nn.Module):
         if n_id is not None:
             assert n_id.device == self.emb.device
             out = out.index_select(0, n_id)
-        return out.to(device=self._device)
+        return out.to(device=self.device)
 
     @torch.no_grad()
     def push(self, x, n_id: Optional[Tensor] = None,
